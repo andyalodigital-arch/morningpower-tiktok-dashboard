@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { buildAuthUrl } from "../../../../lib/tiktok";
+import { buildAuthUrl, getBaseUrl } from "../../../../lib/tiktok";
 
 /**
  * Kick off the TikTok OAuth flow.
- * Redirect URI is derived from the current request origin so it works on any deployment.
+ * Redirect URI is built from the public base URL so it matches the registered URI.
  */
 export async function GET(request) {
-  const origin = new URL(request.url).origin;
+  const origin = getBaseUrl(request);
   const redirectUri = `${origin}/api/auth/callback`;
 
   // Simple CSRF state (random per request).
