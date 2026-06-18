@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { getBaseUrl } from "../../../lib/tiktok";
+import { imgCache } from "../../../lib/imgCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export async function POST(request) {
     fs.mkdirSync(DIR, { recursive: true });
     const buf = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(path.join(DIR, name), buf);
+    imgCache.set(name, buf); // serve fast from memory for TikTok pull
 
     return NextResponse.json({ ok: true, name, url: `${getBaseUrl(request)}/api/img/${name}` });
   } catch (err) {
