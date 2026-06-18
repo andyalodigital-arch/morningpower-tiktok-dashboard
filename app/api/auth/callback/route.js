@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { exchangeCodeForToken, getBaseUrl } from "../../../../lib/tiktok";
+import { saveToken } from "../../../../lib/tokenStore";
+
+export const runtime = "nodejs";
 
 /**
  * OAuth callback — TikTok redirects here with ?code & ?state.
- * Exchanges the code for an access token, stores it in an httpOnly cookie,
+ * Exchanges the code for an access token, stores it in an httpOnly cookie
+ * (for the dashboard) AND persists it server-side (for the /api/metrics pull),
  * then redirects to the dashboard.
  */
 export async function GET(request) {
@@ -29,6 +33,13 @@ export async function GET(request) {
   try {
     const redirectUri = `${origin}/api/auth/callback`;
     const token = await exchangeCodeForToken(code, redirectUri);
+
+    // Persist server-side so /api/metrics can pull without a browser session.
+    saveToken({
+      access_token: token.access_token,
+      refresh_token: token.refresh_token,
+      expires_at: Date.now() + (token.expires_in || 86400) * 1000,
+    });
 
     const res = NextResponse.redirect(`${origin}/dashboard`);
     res.cookies.set("tt_token", token.access_token, {
