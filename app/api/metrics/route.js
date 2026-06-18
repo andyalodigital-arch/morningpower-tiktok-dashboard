@@ -1,16 +1,35 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import { loadToken, saveToken } from "../../../lib/tokenStore";
 import { refreshAccessToken, getUserInfo, listVideos } from "../../../lib/tiktok";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const TOKEN_DIR = process.env.TOKEN_DIR || "/data";
+
+/** Probe whether the token directory exists and is writable (for diagnostics). */
+function diagnose() {
+  const info = { dir: TOKEN_DIR, exists: false, writable: false, files: [], error: null };
+  try {
+    info.exists = fs.existsSync(TOKEN_DIR);
+    if (info.exists) info.files = fs.readdirSync(TOKEN_DIR);
+    const probe = path.join(TOKEN_DIR, ".probe");
+    fs.mkdirSync(TOKEN_DIR, { recursive: true });
+    fs.writeFileSync(probe, "ok");
+    fs.unlinkSync(probe);
+    info.writable = true;
+  } catch (e) {
+    info.error = e.message;
+  }
+  return info;
+}
+
 /**
  * Machine-readable metrics pull, protected by ?key=METRICS_SECRET.
  * Uses the server-persisted token (auto-refreshes when expired) so it can be
- * called headlessly (e.g. by Claude via curl) without a browser session.
- *
- * Returns: { user, videos[], fetched_at }
+ * called headlessly without a browser session.
  */
 export async function GET(request) {
   const url = new URL(request.url);
@@ -21,13 +40,12 @@ export async function GET(request) {
   let tok = loadToken();
   if (!tok || !tok.refresh_token) {
     return NextResponse.json(
-      { error: "no_token. Login once at / to populate the token store." },
+      { error: "no_token. Login once at / to populate the token store.", diag: diagnose() },
       { status: 400 }
     );
   }
 
   try {
-    // Refresh if the access token is expired (or within 60s of expiring).
     if (Date.now() > (tok.expires_at || 0) - 60_000) {
       const r = await refreshAccessToken(tok.refresh_token);
       tok = {
