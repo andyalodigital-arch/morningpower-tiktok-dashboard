@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { exchangeCodeForToken, getBaseUrl } from "../../../../lib/tiktok";
-import { saveToken } from "../../../../lib/tokenStore";
+import { saveToken, loadToken } from "../../../../lib/tokenStore";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
  * OAuth callback — TikTok redirects here with ?code & ?state.
  * Exchanges the code for an access token, stores it in an httpOnly cookie
  * (for the dashboard) AND persists it server-side (for the /api/metrics pull),
- * then redirects to the dashboard.
+ * then redirects to the dashboard with ?login=ok|savefail for verification.
  */
 export async function GET(request) {
   const origin = getBaseUrl(request);
@@ -40,8 +40,11 @@ export async function GET(request) {
       refresh_token: token.refresh_token,
       expires_at: Date.now() + (token.expires_in || 86400) * 1000,
     });
+    // Verify the write actually landed (volume/permission sanity check).
+    const persisted = loadToken();
+    const loginStatus = persisted && persisted.refresh_token ? "ok" : "savefail";
 
-    const res = NextResponse.redirect(`${origin}/dashboard`);
+    const res = NextResponse.redirect(`${origin}/dashboard?login=${loginStatus}`);
     res.cookies.set("tt_token", token.access_token, {
       httpOnly: true,
       secure: true,
